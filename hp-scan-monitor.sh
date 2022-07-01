@@ -21,7 +21,7 @@
 # load config variables:
 #   printerIP: IP address (or name) of the printer
 #   output_dir: directory to put scanned files
-config_dir=/etc/hp-scan-monitor
+config_dir=~/hp-scan-monitor
 . $config_dir/config
 
 function ParseImageInfo()
@@ -91,19 +91,21 @@ function ReceiveScannedFile()
 		printf -v filename "scan%04i.jpg" $num
 	done
 
+	# Yay HP for all those crappy CRs
+	binary_url=$(curl -s -X GET $job_url | tr -d '\r' | grep -oP 'BinaryURL>\K[^<]+')
 	# "stream" the output document as it's being scanned
 	echo "Getting document $output_dir/$filename"
-	job_status=$(curl -s -X GET http://$printerIP/eSCL/ScanJobs/$job_uuid/NextDocument -o $output_dir/$filename)
+	job_status=$(curl -s -X GET http://$printerIP$binary_url -o $output_dir/$filename)
 
 	# make the file writable by group members
 	chmod g+w $output_dir/$filename
 
-	img_info=($(curl -s http://$printerIP/eSCL/ScanJobs/$job_uuid/ScanImageInfo))
-	ParseImageInfo ${img_info[@]}
+	# img_info=($(curl -s http://$printerIP/eSCL/ScanJobs/$job_uuid/ScanImageInfo))
+	# ParseImageInfo ${img_info[@]}
 
 	# make sure the scanner says it was successful
-	scanner_status=($(curl -s http://$printerIP/eSCL/ScannerStatus))
-	ParseScannerStatus ${scanner_status[@]}
+	# scanner_status=($(curl -s http://$printerIP/eSCL/ScannerStatus))
+	# ParseScannerStatus ${scanner_status[@]}
 }
 
 function ParseRegistrations()
@@ -278,12 +280,11 @@ function StartScan()
 
 	# Send a request to specify the scan settings and start the scan
 	echo "Starting scan"
-	response=$(curl -s -v -X POST -d @$config_dir/scan.xml --header 'Content-Type: text/xml' http://$printerIP/eSCL/ScanJobs 2>&1 | grep Location)
+	response=$(curl -s -v -X POST -d @$config_dir/scan.xml --header 'Content-Type: text/xml' http://$printerIP/Scan/Jobs 2>&1 | grep Location | tr -d '\r')
     
 	# read job uuid from the response
-	job_uuid=${response##*/}
- 	job_uuid="${job_uuid%"${job_uuid##*[![:space:]]}"}"
-	echo "Created job uuid=$job_uuid"
+	job_url="${response:12}"
+	echo "Created job url=$job_url"
 }
 
 
